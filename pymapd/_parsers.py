@@ -36,6 +36,14 @@ _thrift_values_to_types = T.TDatumType._VALUES_TO_NAMES
 
 
 def _extract_row_val(desc, val):
+    if not desc.col_type.is_array:
+        vals = _extract_val(desc, val)
+    else:
+        vals = [_extract_val(desc, arr_row) for arr_row in val.val.arr_val]
+    return vals
+
+
+def _extract_val(desc, val):
     # type: (T.TColumnType, T.TDatum) -> Any
     typename = T.TDatumType._VALUES_TO_NAMES[desc.col_type.type]
     if val.is_null:
@@ -43,11 +51,12 @@ def _extract_row_val(desc, val):
     val = getattr(val.val, _typeattr[typename] + '_val')
     base = datetime.datetime(1970, 1, 1)
     if typename == 'TIMESTAMP':
-        val = (base + datetime.timedelta(seconds=val))
+        val = None if val is None else (base + datetime.timedelta(seconds=val))
     elif typename == 'DATE':
-        val = (base + datetime.timedelta(seconds=val)).date()
+        val = None if val is None else (
+            base + datetime.timedelta(seconds=val)).date()
     elif typename == 'TIME':
-        val = seconds_to_time(val)
+        val = None if val is None else seconds_to_time(val)
     return val
 
 
@@ -56,7 +65,12 @@ def _extract_col_vals(desc, val):
     typename = T.TDatumType._VALUES_TO_NAMES[desc.col_type.type]
     nulls = val.nulls
 
-    vals = getattr(val.data, _typeattr[typename] + '_col')
+    if not desc.col_type.is_array:
+        vals = getattr(val.data, _typeattr[typename] + '_col')
+    else:
+        vals = [None if arr_col.is_null
+                else getattr(arr_col.data, _typeattr[typename] + '_col')
+                for arr_col in val.data.arr_col]
     vals = [None if null else v
             for null, v in zip(nulls, vals)]
 
